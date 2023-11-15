@@ -1,6 +1,5 @@
 package io.github.kory33.experimental.recursiveeff.parboth
 
-import parboth._
 import cats.Parallel
 import cats.~>
 import org.atnos.eff.Eff
@@ -10,7 +9,7 @@ import org.atnos.eff.MemberIn
 import org.atnos.eff.Interpret
 import org.atnos.eff.Interpreter
 
-trait ParBothInterpretation {
+trait ParBothInterpretation { self: ParBothCreation =>
   def runParBoth[F[_]: Parallel, R](
     runToF: Eff[R, _] ~> F
   ): (ParBoth[R, _] ~> F) = FunctionK.lift([A] =>
