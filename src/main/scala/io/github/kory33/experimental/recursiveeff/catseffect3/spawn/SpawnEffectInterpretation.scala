@@ -32,8 +32,8 @@ trait SpawnEffectInterpretation extends SpawnEffectCreation {
             GenSpawn[F, E].never
           case SpawnEffect.Cede() =>
             GenSpawn[F, E].cede
-          case p: SpawnEffect.RacePair[r, e, a, b] =>
-            GenSpawn[F, E].racePair(runToF(p.effLeft), runToF(p.effRight)).map(
+          case SpawnEffect.RacePair(left, right) =>
+            GenSpawn[F, E].racePair(runToF(left), runToF(right)).map(
               _.bimap(
                 (outcomeLeft, fiberRight) =>
                   (outcomeLeft.mapK(fToEffR), fiberRight.mapK(fToEffR)),
