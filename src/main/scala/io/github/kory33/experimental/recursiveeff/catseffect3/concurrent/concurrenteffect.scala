@@ -1,0 +1,3 @@
+package io.github.kory33.experimental.recursiveeff.catseffect3.concurrent
+
+object concurrenteffect extends ConcurrentEffectCreation with ConcurrentEffectInterpretation
