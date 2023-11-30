@@ -6,7 +6,7 @@ import cats.arrow.FunctionK
 import org.atnos.eff._
 import Eff._
 
-trait ClockEffectInterpretation extends ClockEffectCreation {
+trait ClockEffectInterpretation { self: ClockEffectCreation =>
   def delegateToClock[F[_]: Clock, R]: ClockEffect ~> F =
     FunctionK.lift(
       [A] =>

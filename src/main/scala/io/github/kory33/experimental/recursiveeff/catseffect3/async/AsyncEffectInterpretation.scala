@@ -9,9 +9,9 @@ import cats.effect.kernel.Cont
 import cats.effect.kernel.MonadCancel
 import io.github.kory33.experimental.recursiveeff.util.CEKernelExtensions
 
-trait AsyncEffectInterpretation
-    extends AsyncEffectCreation
-    with CEKernelExtensions {
+trait AsyncEffectInterpretation { self: AsyncEffectCreation =>
+  import CEKernelExtensions.given
+
   def delegateToAsync[F[_]: Async, R](runToF: Eff[R, _] ~> F): AsyncEffect[R, _] ~> F =
     FunctionK.lift(
       [A] =>

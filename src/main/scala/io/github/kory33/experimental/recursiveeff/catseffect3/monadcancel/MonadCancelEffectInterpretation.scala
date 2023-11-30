@@ -9,10 +9,10 @@ import cats.effect.kernel.Poll
 import io.github.kory33.experimental.recursiveeff.util.EffUtils
 import io.github.kory33.experimental.recursiveeff.util.CEKernelExtensions
 
-trait MonadCancelEffectInterpretation
-    extends MonadCancelEffectCreation
-    with EffUtils
-    with CEKernelExtensions {
+trait MonadCancelEffectInterpretation { self: MonadCancelEffectCreation =>
+  import CEKernelExtensions.given
+  import EffUtils._
+
   def delegateToMonadCancel[F[_], E, R](runToF: Eff[R, _] ~> F)(
     using MonadCancel[F, E],
     F |= R

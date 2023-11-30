@@ -6,7 +6,7 @@ import cats.effect.kernel.Unique
 import cats.~>
 import cats.arrow.FunctionK
 
-trait UniqueEffectInterpretation extends UniqueEffectCreation {
+trait UniqueEffectInterpretation { self: UniqueEffectCreation =>
   def delegateToUnique[F[_]: Unique, R]: UniqueEffect ~> F =
     FunctionK.lift([A] =>
       (eff: UniqueEffect[A]) =>

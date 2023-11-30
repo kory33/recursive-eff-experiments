@@ -11,7 +11,7 @@ import cats.syntax.all._
 import cats.effect.kernel.Outcome
 import cats.effect.kernel.Sync
 
-trait SyncEffectInterpretation extends SyncEffectCreation {
+trait SyncEffectInterpretation { self: SyncEffectCreation =>
   def delegateToSync[F[_], R](
     using Sync[F]
   ): SyncEffect ~> F =

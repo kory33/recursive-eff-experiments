@@ -12,10 +12,10 @@ import cats.effect.kernel.Outcome
 import io.github.kory33.experimental.recursiveeff.util.CEKernelExtensions
 import io.github.kory33.experimental.recursiveeff.util.EffUtils
 
-trait SpawnEffectInterpretation
-    extends SpawnEffectCreation
-    with CEKernelExtensions
-    with EffUtils {
+trait SpawnEffectInterpretation { self: SpawnEffectCreation =>
+  import CEKernelExtensions.given
+  import EffUtils._
+
   def delegateToGenSpawn[F[_], E, R](runToF: Eff[R, _] ~> F)(
     using GenSpawn[F, E],
     F |= R

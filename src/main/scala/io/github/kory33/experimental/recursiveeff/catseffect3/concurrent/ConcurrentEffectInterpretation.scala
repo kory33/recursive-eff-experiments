@@ -8,7 +8,9 @@ import cats.arrow.FunctionK
 import cats.syntax.functor._
 import io.github.kory33.experimental.recursiveeff.util.EffUtils
 
-trait ConcurrentEffectInterpretation extends ConcurrentEffectCreation with EffUtils {
+trait ConcurrentEffectInterpretation { self: ConcurrentEffectCreation =>
+  import EffUtils._
+
   def delegateToConcurrent[F[_], E, R](
     using Concurrent[F],
     F |= R

@@ -6,7 +6,7 @@ import cats.~>
 import cats.effect.kernel.GenTemporal
 import cats.arrow.FunctionK
 
-trait TemporalEffectInterpretation extends TemporalEffectCreation {
+trait TemporalEffectInterpretation { self: TemporalEffectCreation =>
   def delegateToTemporal[F[_], E, R](
     using GenTemporal[F, E]
   ): TemporalEffect ~> F = FunctionK.lift(
