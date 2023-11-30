@@ -7,18 +7,11 @@ import org.atnos.eff._
 import Eff._
 import cats.effect.kernel.Cont
 import cats.effect.kernel.MonadCancel
+import io.github.kory33.experimental.recursiveeff.util.CEKernelExtensions
 
-trait AsyncEffectInterpretation extends AsyncEffectCreation {
-  extension [F[_], K, A](cont: Cont[F, K, A])
-    private def mapK[H[_]](nat: F ~> H): Cont[H, K, A] =
-      new Cont[H, K, A] {
-        def apply[G[_]](
-          implicit G: MonadCancel[G, Throwable]
-        ): (Either[Throwable, K] => Unit, G[K], H ~> G) => G[A] = {
-          case (callback, body, lift) => cont(G)(callback, body, nat.andThen(lift))
-        }
-      }
-
+trait AsyncEffectInterpretation
+    extends AsyncEffectCreation
+    with CEKernelExtensions {
   def delegateToAsync[F[_]: Async, R](runToF: Eff[R, _] ~> F): AsyncEffect[R, _] ~> F =
     FunctionK.lift(
       [A] =>

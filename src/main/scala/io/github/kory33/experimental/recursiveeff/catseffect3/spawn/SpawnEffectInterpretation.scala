@@ -9,15 +9,11 @@ import cats.effect.kernel.Fiber
 import cats.Functor
 import cats.syntax.all._
 import cats.effect.kernel.Outcome
+import io.github.kory33.experimental.recursiveeff.util.CEKernelExtensions
 
-trait SpawnEffectInterpretation extends SpawnEffectCreation {
-  extension [F[_], E, A](fiber: Fiber[F, E, A])
-    private def mapK[G[_]: Functor](nat: F ~> G): Fiber[G, E, A] =
-      new Fiber[G, E, A] {
-        def cancel: G[Unit] = nat(fiber.cancel)
-        def join: G[Outcome[G, E, A]] = nat(fiber.join).map(_.mapK(nat))
-      }
-
+trait SpawnEffectInterpretation
+    extends SpawnEffectCreation
+    with CEKernelExtensions {
   def delegateToGenSpawn[F[_], E, R](runToF: Eff[R, _] ~> F)(
     using GenSpawn[F, E],
     F |= R
