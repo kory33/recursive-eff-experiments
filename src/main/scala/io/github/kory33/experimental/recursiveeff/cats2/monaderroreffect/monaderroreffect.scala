@@ -1,3 +1,3 @@
 package io.github.kory33.experimental.recursiveeff.cats2.monaderroreffect
 
-object monaderroreffecct extends MonadErrorEffectCreation with MonadErrorEffectInterpretation
+object monaderroreffect extends MonadErrorEffectCreation with MonadErrorEffectInterpretation

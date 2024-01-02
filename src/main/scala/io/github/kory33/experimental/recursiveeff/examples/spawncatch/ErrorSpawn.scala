@@ -1,7 +1,7 @@
 package io.github.kory33.experimental.recursiveeff.examples.errorspawn
 
 import org.atnos.eff.Fx
-import io.github.kory33.experimental.recursiveeff.cats2.monaderroreffect.monaderroreffecct._
+import io.github.kory33.experimental.recursiveeff.cats2.monaderroreffect.monaderroreffect._
 import io.github.kory33.experimental.recursiveeff.catseffect3.spawn.spawneffect._
 import io.github.kory33.experimental.recursiveeff.util.EquiRecurse
 import org.atnos.eff.*
@@ -75,6 +75,20 @@ object Interpreters:
           }
         }))
 
+  def logWithCurrentThreadName[R, U](
+    using Member.Aux[Logging, R, U],
+    IO |= U
+  ): Eff[R, _] ~> Eff[U, _] =
+    FunctionK.lift([A] =>
+      (eff: Eff[R, A]) =>
+        eff.translate(new Translate[Logging, U] {
+          def apply[X](kv: Logging[X]): Eff[U, X] = Eff.send {
+            kv match
+              case Logging.PrintlnInfo(s) =>
+                IO { println(s"[${Thread.currentThread.getName}] $s") }
+          }
+        }))
+
   // Run Eff[{IO}, A] to IO[A]
   def runIO[R](using Member.Aux[IO, R, NoFx]): Eff[R, _] ~> IO =
     FunctionK.lift([A] => (eff: Eff[R, A]) => Eff.detachA[IO, R, A, Throwable](eff))
@@ -100,11 +114,51 @@ object Main:
   /// ----
 
   // An interpreter that non-blockingly logs all exceptions caught in MonadErrorEffect.HandleErrorWith
-  def overallInterpreter: Eff[R0, _] ~> IO = {
+  // We need "overallInterpreter" to be lazy and wrapped in FunctionK.lift, as it is a recursive value
+  lazy val overallInterpreter: Eff[R0, _] ~> IO = {
     import Interpreters.*
-
-    handleErrorLoggingToDestinationF(overallInterpreter)
-      .andThen(handleSpawnWithDestinationF(overallInterpreter))
-      .andThen(logWithPrintlnInIO)
-      .andThen(runIO)
+    FunctionK.lift([A] =>
+      (eff: Eff[R0, A]) => {
+        handleErrorLoggingToDestinationF(overallInterpreter)
+          .andThen(handleSpawnWithDestinationF(overallInterpreter))
+          .andThen(logWithCurrentThreadName)
+          .andThen(runIO)
+          .apply(eff)
+    })
   }
+
+  val testProgram =
+    for
+      _ <- printlnInfo[R0]("Hello world!")
+      handle <- start {
+        for
+          _ <- printlnInfo("Hello world from a spawned task!")
+          _ <- handleErrorWith[R0, Throwable, Unit](
+            raiseError(new Exception("Exception in a spawned task!"): Throwable)
+          )(e => printlnInfo(s"Caught exception: ${e.getMessage}"))
+        yield ()
+      }
+      _ <- printlnInfo("Waiting for the spawned task to finish...")
+      _ <- handle.join
+    yield ()
+
+  def main(args: Array[String]): Unit =
+    import cats.effect.unsafe.implicits.global
+    overallInterpreter(testProgram).unsafeRunSync()
+
+    /*
+     * Example output:
+     *
+     * ```
+     * > [io-compute-5] Hello world!
+     * > [io-compute-0] Hello world from a spawned task!
+     * > [io-compute-5] Waiting for the spawned task to finish...
+     * > [io-compute-0] Caught exception: Exception in a spawned task!
+     * > [io-compute-12] Exception in a spawned task!
+     * ```
+     *
+     * Of course cats.effect.unsafe.implicits.global does not guarantee that a fiber is
+     * consistently scheduled on the same thread, but since all fibers in the test program above
+     * are short-lived, the above output illustrates how each action is executed on different
+     * fibers...
+     */

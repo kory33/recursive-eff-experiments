@@ -15,7 +15,7 @@ trait MonadErrorEffectCreation {
   def raiseError[R, E, A](e: E)(using MonadErrorEffect[R, E, _] |= R): Eff[R, A] =
     send[MonadErrorEffect[R, E, _], R, A](MonadErrorEffect.RaiseError(e))
 
-  def handleErrorWith[R, E, A](eff: Eff[R, A], handler: E => Eff[R, A])(
+  def handleErrorWith[R, E, A](eff: Eff[R, A])(handler: E => Eff[R, A])(
     using MonadErrorEffect[R, E, _] |= R
   ): Eff[R, A] =
     send[MonadErrorEffect[R, E, _], R, A](MonadErrorEffect.HandleErrorWith(eff, handler))
