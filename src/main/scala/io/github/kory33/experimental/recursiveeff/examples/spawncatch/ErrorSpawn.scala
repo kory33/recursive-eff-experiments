@@ -132,14 +132,16 @@ object Main:
       _ <- printlnInfo[R0]("Hello world!")
       handle <- start {
         for
-          _ <- printlnInfo("Hello world from a spawned task!")
+          _ <- printlnInfo("Hello world from a spawned task! Throwing an exception...")
           _ <- handleErrorWith[R0, Throwable, Unit](
             raiseError(new Exception("Exception in a spawned task!"): Throwable)
           )(e => printlnInfo(s"Caught exception: ${e.getMessage}"))
+          _ <- printlnInfo("Inner fiber is closing.")
         yield ()
       }
       _ <- printlnInfo("Waiting for the spawned task to finish...")
       _ <- handle.join
+      _ <- printlnInfo("Done!")
     yield ()
 
   def main(args: Array[String]): Unit =
