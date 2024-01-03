@@ -10,6 +10,7 @@ import scala.concurrent.duration.FiniteDuration
 import io.github.kory33.experimental.recursiveeff.catseffect3.spawn.spawneffect._
 import cats.effect.kernel.GenSpawn
 import cats.data.State
+import cats.effect.kernel.GenTemporal
 
 package common:
   object Effects:
@@ -24,12 +25,12 @@ package common:
       Eff.send(Sleep.SleepFinite(duration))
 
     trait StateEffectCreation:
-      def get[S](using State[S, _] |= S): Eff[S, S] =
-        send[State[S, _], S, S](State.get)
-      def set[S](s: S)(using State[S, _] |= S): Eff[S, Unit] =
-        send[State[S, _], S, Unit](State.set(s))
-      def modify[S, A](f: S => (S, A))(using State[S, _] |= S): Eff[S, A] =
-        send[State[S, _], S, A](State.apply(f))
+      def get[S, R](using State[S, _] |= R): Eff[R, S] =
+        send[State[S, _], R, S](State.get)
+      def set[S, R](s: S)(using State[S, _] |= R): Eff[R, Unit] =
+        send[State[S, _], R, Unit](State.set(s))
+      def modify[S, R, A](f: S => (S, A))(using State[S, _] |= R): Eff[R, A] =
+        send[State[S, _], R, A](State.apply(f))
     object stateeffect extends StateEffectCreation
     export stateeffect.*
 
@@ -64,6 +65,22 @@ package common:
         (eff: Eff[R, A]) =>
           Interpret.runInterpreter[R, U, SpawnEffect[R0, Throwable, _], A, A](eff)(
             Interpreter.fromNat(delegateToGenSpawn(runToF))
+        ))
+
+    def handleSleepWithTemporal[F[_], R, U](
+      using Member.Aux[Sleep, R, U],
+      F |= U,
+      GenTemporal[F, ?]
+    ): Eff[R, _] ~> Eff[U, _] =
+      FunctionK.lift([A] =>
+        (eff: Eff[R, A]) =>
+          Interpret.runInterpreter[R, U, Sleep, A, A](eff)(
+            Interpreter.fromNat(FunctionK.lift([X] =>
+              (kv: Sleep[X]) =>
+                kv match
+                  case Sleep.SleepFinite(duration) =>
+                    GenTemporal[F].sleep(duration): F[X]
+            ))
         ))
 
     // Run Eff[{IO}, A] to IO[A]
