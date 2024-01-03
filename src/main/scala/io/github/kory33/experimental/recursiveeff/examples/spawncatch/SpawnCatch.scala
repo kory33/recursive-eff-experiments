@@ -1,4 +1,4 @@
-package io.github.kory33.experimental.recursiveeff.examples.errorspawn
+package io.github.kory33.experimental.recursiveeff.examples.spawncatch
 
 import org.atnos.eff.Fx
 import io.github.kory33.experimental.recursiveeff.cats2.monaderroreffect.monaderroreffect._
@@ -17,12 +17,8 @@ import cats.syntax.all.given
 import cats.effect.IO
 import cats.effect.kernel.GenSpawn
 
-object MyEffects:
-  enum Logging[A]:
-    case PrintlnInfo(s: String) extends Logging[Unit]
-  def printlnInfo[R](s: String)(using Logging |= R): Eff[R, Unit] =
-    Eff.send(Logging.PrintlnInfo(s))
-import MyEffects._
+import io.github.kory33.experimental.recursiveeff.examples.common.Effects.*
+import io.github.kory33.experimental.recursiveeff.examples.common.Interpreters.*
 
 object Interpreters:
   def handleErrorLoggingToDestinationF[F[_], R0, R, U](runToF: Eff[R0, _] ~> F)(
@@ -44,54 +40,6 @@ object Interpreters:
               )
         }
       }))
-
-  def handleSpawnWithDestinationF[F[_], R0, R, U](runToF: Eff[R0, _] ~> F)(
-    using Member.Aux[SpawnEffect[R0, Throwable, _], R, U],
-    GenSpawn[F, Throwable],
-    F |= U,
-    F |= R0 /* this cannot be deduced from F |= U, as per the derivation rules in org.atnos.eff */,
-    Logging |= R0
-  ): Eff[R, _] ~> Eff[U, _] =
-    FunctionK.lift([A] =>
-      (eff: Eff[R, A]) =>
-        Interpret.runInterpreter[R, U, SpawnEffect[R0, Throwable, _], A, A](eff)(
-          Interpreter.fromNat(delegateToGenSpawn(runToF))
-      ))
-
-  /**
-   * The "standard" interpreter of the Logging effect, which prints all log messages to stdout
-   * in cats.effect.IO context.
-   */
-  def logWithPrintlnInIO[R, U](
-    using Member.Aux[Logging, R, U],
-    IO |= U
-  ): Eff[R, _] ~> Eff[U, _] =
-    FunctionK.lift([A] =>
-      (eff: Eff[R, A]) =>
-        eff.translate(new Translate[Logging, U] {
-          def apply[X](kv: Logging[X]): Eff[U, X] = Eff.send {
-            kv match
-              case Logging.PrintlnInfo(s) => IO.println(s)
-          }
-        }))
-
-  def logWithCurrentThreadName[R, U](
-    using Member.Aux[Logging, R, U],
-    IO |= U
-  ): Eff[R, _] ~> Eff[U, _] =
-    FunctionK.lift([A] =>
-      (eff: Eff[R, A]) =>
-        eff.translate(new Translate[Logging, U] {
-          def apply[X](kv: Logging[X]): Eff[U, X] = Eff.send {
-            kv match
-              case Logging.PrintlnInfo(s) =>
-                IO { println(s"[${Thread.currentThread.getName}] $s") }
-          }
-        }))
-
-  // Run Eff[{IO}, A] to IO[A]
-  def runIO[R](using Member.Aux[IO, R, NoFx]): Eff[R, _] ~> IO =
-    FunctionK.lift([A] => (eff: Eff[R, A]) => Eff.detachA[IO, R, A, Throwable](eff))
 
 object Main:
   /// ----
