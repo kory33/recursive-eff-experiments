@@ -40,7 +40,7 @@ object Interpreters:
           })
       })
 
-object GlobalStateTest:
+object FiberLocalStateTest:
   /// ----
   // Definitions for the effect stack we will use
   //
