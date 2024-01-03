@@ -93,7 +93,7 @@ object GlobalStateTest:
           _ <- printlnInfo[R0]("Hello world from a spawned fiber!")
 
           _ <- printlnInfo("modifying refcell in spawned fiber...")
-          _ <- (0 until 10).toList.traverse { _ =>
+          _ <- (0 until 4).toList.traverse { _ =>
             incrementAndLog >> incrementAndLog >> sleepFinite(500.millis)
           }
           _ <- printlnInfo[R0]("spawned fiber done.")
@@ -101,7 +101,7 @@ object GlobalStateTest:
       }
 
       _ <- printlnInfo("modifying refcell in main fiber...")
-      _ <- (0 until 10).toList.traverse { _ => incrementAndLog >> sleepFinite(500.millis) }
+      _ <- (0 until 4).toList.traverse { _ => incrementAndLog >> sleepFinite(500.millis) }
       _ <- printlnInfo[R0]("main fiber done.")
 
       _ <- handle.join
@@ -111,3 +111,28 @@ object GlobalStateTest:
   def main(args: Array[String]): Unit =
     import cats.effect.unsafe.implicits.global
     overallInterpreter(testProgram).unsafeRunSync()
+    //
+    // Example output:
+    //
+    // ```
+    // > [io-compute-0] Hello world!
+    // > [io-compute-0] Initial state: 0
+    // > [io-compute-4] Hello world from a spawned fiber!
+    // > [io-compute-4] modifying refcell in spawned fiber...
+    // > [io-compute-0] modifying refcell in main fiber...
+    // > [io-compute-4] New state: 1
+    // > [io-compute-0] New state: 1
+    // > [io-compute-4] New state: 2
+    // > [io-compute-4] New state: 3
+    // > [io-compute-0] New state: 2
+    // > [io-compute-4] New state: 4
+    // > [io-compute-0] New state: 3
+    // > [io-compute-4] New state: 5
+    // > [io-compute-4] New state: 6
+    // > [io-compute-0] New state: 4
+    // > [io-compute-4] New state: 7
+    // > [io-compute-4] New state: 8
+    // > [io-compute-4] spawned fiber done.
+    // > [io-compute-0] main fiber done.
+    // > [io-compute-0] joined. final state: 4
+    // ```
