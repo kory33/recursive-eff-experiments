@@ -161,6 +161,6 @@ object Main:
      *
      * Of course cats.effect.unsafe.implicits.global does not guarantee that a fiber is
      * consistently scheduled on the same thread, but since all fibers in the test program above
-     * are short-lived, the above output illustrates how each action is executed on different
+     * are short-lived, the above output does explain how each action is executed on different
      * fibers...
      */
