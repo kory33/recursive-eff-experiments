@@ -16,6 +16,8 @@ import cats.syntax.all.given
 
 import io.github.kory33.experimental.recursiveeff.examples.common.Effects.*
 import io.github.kory33.experimental.recursiveeff.examples.common.Interpreters.*
+import cats.effect.kernel.Ref
+import io.github.kory33.experimental.recursiveeff.examples.common.Util
 
 object Interpreters:
   import org.atnos.eff.syntax.all.given
@@ -40,7 +42,22 @@ object Interpreters:
           })
       })
 
-object FiberLocalStateTest:
+  def handleStateWithGlobalState[F[_], S, R0, R, U](
+    globalStateRef: Ref[F, S]
+  )(runToF: Eff[R0, _] ~> F)(
+    using Member.Aux[State[S, _], R, U],
+    Concurrent[F],
+    F |= U
+  ): Eff[R, _] ~> Eff[U, _] =
+    FunctionK.lift([A] =>
+      (eff: Eff[R, A]) =>
+        eff.translate(new Translate[State[S, _], U] {
+          def apply[X](kv: State[S, X]): Eff[U, X] = Eff.send {
+            globalStateRef.modify(kv.runF.value.andThen(_.value))
+          }
+        }))
+
+trait TestParameters:
   /// ----
   // Definitions for the effect stack we will use
   //
@@ -61,23 +78,8 @@ object FiberLocalStateTest:
     R0.unfix.flip.substituteCo[Member.Aux[F, _, U]](ev)
   /// ----
 
-  import Interpreters.*
-  import scala.concurrent.duration.*
-
-  // We need "overallInterpreter" to be lazy and wrapped in FunctionK.lift, as it is a recursive value
-  val overallInterpreter: Eff[R0, _] ~> IO = {
-    FunctionK.lift([A] =>
-      (eff: Eff[R0, A]) => {
-        handleSpawnWithDestinationF(overallInterpreter)
-          .andThen(logWithCurrentThreadName)
-          .andThen(handleStateWithFiberLocalState(0)(overallInterpreter))
-          .andThen(handleSleepWithTemporal)
-          .andThen(runIO)
-          .apply(eff)
-    })
-  }
-
   val testProgram: Eff[R0, Unit] =
+    import scala.concurrent.duration.*
     for
       _ <- printlnInfo[R0]("Hello world!")
       _ <- get >>= (s => printlnInfo(s"Initial state: ${s}"))
@@ -108,6 +110,17 @@ object FiberLocalStateTest:
       _ <- get >>= (r => printlnInfo(s"joined. final state: ${r}"))
     yield ()
 
+object ScopeLocalStateTest extends TestParameters:
+  import Interpreters.*
+
+  val overallInterpreter: Eff[R0, _] ~> IO = Util.fixNat(self =>
+    handleSpawnWithDestinationF(self)
+      .andThen(logWithCurrentThreadName)
+      .andThen(handleStateWithFiberLocalState(0)(self))
+      .andThen(handleSleepWithTemporal)
+      .andThen(runIO)
+  )
+
   def main(args: Array[String]): Unit =
     import cats.effect.unsafe.implicits.global
     overallInterpreter(testProgram).unsafeRunSync()
@@ -135,4 +148,49 @@ object FiberLocalStateTest:
     // > [io-compute-4] spawned fiber done.
     // > [io-compute-0] main fiber done.
     // > [io-compute-0] joined. final state: 4
+    // ```
+
+object GlobalStateTest extends TestParameters:
+  import Interpreters.*
+
+  val overallInterpreter: Eff[R0, _] ~> IO =
+    FunctionK.lift([A] =>
+      (eff: Eff[R0, A]) => {
+        IO.ref(0) >>= { ref =>
+          Util.fixNat[Eff[R0, _], IO](self =>
+            handleSpawnWithDestinationF(self)
+              .andThen(logWithCurrentThreadName)
+              .andThen(handleStateWithGlobalState(ref)(self))
+              .andThen(handleSleepWithTemporal)
+              .andThen(runIO)
+          ).apply(eff)
+        }
+    })
+
+  def main(args: Array[String]): Unit =
+    import cats.effect.unsafe.implicits.global
+    overallInterpreter(testProgram).unsafeRunSync()
+    //
+    // Example output:
+    // ```
+    // > [io-compute-9] Hello world!
+    // > [io-compute-9] Initial state: 0
+    // > [io-compute-4] Hello world from a spawned fiber!
+    // > [io-compute-4] modifying refcell in spawned fiber...
+    // > [io-compute-9] modifying refcell in main fiber...
+    // > [io-compute-4] New state: 1
+    // > [io-compute-9] New state: 2
+    // > [io-compute-4] New state: 3
+    // > [io-compute-9] New state: 4
+    // > [io-compute-4] New state: 5
+    // > [io-compute-4] New state: 6
+    // > [io-compute-9] New state: 7
+    // > [io-compute-4] New state: 8
+    // > [io-compute-4] New state: 9
+    // > [io-compute-4] New state: 11
+    // > [io-compute-9] New state: 10
+    // > [io-compute-4] New state: 12
+    // > [io-compute-4] spawned fiber done.
+    // > [io-compute-9] main fiber done.
+    // > [io-compute-9] joined. final state: 12
     // ```

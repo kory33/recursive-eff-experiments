@@ -86,3 +86,8 @@ package common:
     // Run Eff[{IO}, A] to IO[A]
     def runIO[R](using Member.Aux[IO, R, NoFx]): Eff[R, _] ~> IO =
       FunctionK.lift([A] => (eff: Eff[R, A]) => Eff.detachA[IO, R, A, Throwable](eff))
+
+  object Util:
+    def fixNat[F[_], G[_]](kernel: (F ~> G) => (F ~> G)): F ~> G =
+      // fixNat can act as a thunk defined this way
+      FunctionK.lift([A] => (fa: F[A]) => kernel(fixNat(kernel)).apply(fa))
