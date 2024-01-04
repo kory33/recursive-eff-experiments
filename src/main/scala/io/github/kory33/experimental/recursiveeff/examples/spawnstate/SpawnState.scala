@@ -144,7 +144,7 @@ object GlobalStateTest extends TestParameters:
   val overallInterpreter: Eff[R0, _] ~> IO =
     Util.flattenNat {
       IO.ref(0).map { ref =>
-        Util.fixNat[Eff[R0, _], IO](self =>
+        Util.fixNat(self =>
           handleSpawnWithDestinationF(self)
             .andThen(logWithCurrentThreadName)
             .andThen(handleStateWithRef(ref))
