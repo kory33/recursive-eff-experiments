@@ -27,9 +27,9 @@ object Interpreters:
 
   def handleStateWithFiberLocalState[F[_], S, R0, R, U](
     initialState: S
-  )(runToF: Eff[R0, _] ~> F)(
-    using Member.Aux[State[S, _], R, U],
-    Concurrent[F],
+  )(
+    using Concurrent[F],
+    Member.Aux[State[S, _], R, U],
     F |= U
   ): Eff[R, _] ~> Eff[U, _] =
     FunctionK.lift([A] =>
@@ -42,11 +42,11 @@ object Interpreters:
           })
       })
 
-  def handleStateWithGlobalState[F[_], S, R0, R, U](
+  def handleStateWithRef[F[_], S, R0, R, U](
     globalStateRef: Ref[F, S]
-  )(runToF: Eff[R0, _] ~> F)(
-    using Member.Aux[State[S, _], R, U],
-    Concurrent[F],
+  )(
+    using Concurrent[F],
+    Member.Aux[State[S, _], R, U],
     F |= U
   ): Eff[R, _] ~> Eff[U, _] =
     FunctionK.lift([A] =>
@@ -113,13 +113,19 @@ trait TestParameters:
 object ScopeLocalStateTest extends TestParameters:
   import Interpreters.*
 
-  val overallInterpreter: Eff[R0, _] ~> IO = Util.fixNat(self =>
-    handleSpawnWithDestinationF(self)
-      .andThen(logWithCurrentThreadName)
-      .andThen(handleStateWithFiberLocalState(0)(self))
-      .andThen(handleSleepWithTemporal)
-      .andThen(runIO)
-  )
+  val overallInterpreter: Eff[R0, _] ~> IO =
+    Util.fixNat(self =>
+      FunctionK.lift([A] =>
+        (eff: Eff[R0, A]) =>
+          IO.ref(0) >>= { ref =>
+            handleSpawnWithDestinationF(self)
+              .andThen(logWithCurrentThreadName)
+              .andThen(handleStateWithRef(ref))
+              .andThen(handleSleepWithTemporal)
+              .andThen(runIO)
+              .apply(eff)
+        })
+    )
 
   def main(args: Array[String]): Unit =
     import cats.effect.unsafe.implicits.global
@@ -160,7 +166,7 @@ object GlobalStateTest extends TestParameters:
           Util.fixNat[Eff[R0, _], IO](self =>
             handleSpawnWithDestinationF(self)
               .andThen(logWithCurrentThreadName)
-              .andThen(handleStateWithGlobalState(ref)(self))
+              .andThen(handleStateWithRef(ref))
               .andThen(handleSleepWithTemporal)
               .andThen(runIO)
           ).apply(eff)
