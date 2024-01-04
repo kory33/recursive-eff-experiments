@@ -11,8 +11,13 @@ import io.github.kory33.experimental.recursiveeff.catseffect3.spawn.spawneffect.
 import cats.effect.kernel.GenSpawn
 import cats.data.State
 import cats.effect.kernel.GenTemporal
+import cats.FlatMap
 
 package common:
+  import org.atnos.eff.syntax.all.given
+  import cats.effect.syntax.all.given
+  import cats.syntax.all.given
+
   object Effects:
     enum Logging[A]:
       case PrintlnInfo(s: String) extends Logging[Unit]
@@ -36,9 +41,6 @@ package common:
 
   object Interpreters:
     import Effects.*
-    import org.atnos.eff.syntax.all.given
-    import cats.effect.syntax.all.given
-    import cats.syntax.all.given
 
     def logWithCurrentThreadName[R, U](
       using Member.Aux[Logging, R, U],
@@ -91,3 +93,6 @@ package common:
     def fixNat[F[_], G[_]](kernel: (F ~> G) => (F ~> G)): F ~> G =
       // fixNat can act as a thunk defined this way
       FunctionK.lift([A] => (fa: F[A]) => kernel(fixNat(kernel)).apply(fa))
+
+    def flattenNat[F[_], M[_]: FlatMap](suspendedNat: M[F ~> M]): F ~> M =
+      FunctionK.lift([A] => (fa: F[A]) => suspendedNat >>= { nat => nat(fa) })

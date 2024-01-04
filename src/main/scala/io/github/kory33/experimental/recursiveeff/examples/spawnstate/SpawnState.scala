@@ -25,25 +25,8 @@ object Interpreters:
   import cats.syntax.all.given
   import cats.effect.kernel.Concurrent
 
-  def handleStateWithFiberLocalState[F[_], S, R0, R, U](
-    initialState: S
-  )(
-    using Concurrent[F],
-    Member.Aux[State[S, _], R, U],
-    F |= U
-  ): Eff[R, _] ~> Eff[U, _] =
-    FunctionK.lift([A] =>
-      (eff: Eff[R, A]) =>
-        Eff.send(Concurrent[F].ref(initialState)) >>= { ref =>
-          eff.translate(new Translate[State[S, _], U] {
-            def apply[X](kv: State[S, X]): Eff[U, X] = Eff.send {
-              ref.modify(kv.runF.value.andThen(_.value))
-            }
-          })
-      })
-
   def handleStateWithRef[F[_], S, R0, R, U](
-    globalStateRef: Ref[F, S]
+    stateRef: Ref[F, S]
   )(
     using Concurrent[F],
     Member.Aux[State[S, _], R, U],
@@ -53,7 +36,7 @@ object Interpreters:
       (eff: Eff[R, A]) =>
         eff.translate(new Translate[State[S, _], U] {
           def apply[X](kv: State[S, X]): Eff[U, X] = Eff.send {
-            globalStateRef.modify(kv.runF.value.andThen(_.value))
+            stateRef.modify(kv.runF.value.andThen(_.value))
           }
         }))
 
@@ -115,16 +98,15 @@ object ScopeLocalStateTest extends TestParameters:
 
   val overallInterpreter: Eff[R0, _] ~> IO =
     Util.fixNat(self =>
-      FunctionK.lift([A] =>
-        (eff: Eff[R0, A]) =>
-          IO.ref(0) >>= { ref =>
-            handleSpawnWithDestinationF(self)
-              .andThen(logWithCurrentThreadName)
-              .andThen(handleStateWithRef(ref))
-              .andThen(handleSleepWithTemporal)
-              .andThen(runIO)
-              .apply(eff)
-        })
+      Util.flattenNat {
+        IO.ref(0).map { ref =>
+          handleSpawnWithDestinationF(self)
+            .andThen(logWithCurrentThreadName)
+            .andThen(handleStateWithRef(ref))
+            .andThen(handleSleepWithTemporal)
+            .andThen(runIO)
+        }
+      }
     )
 
   def main(args: Array[String]): Unit =
@@ -160,18 +142,17 @@ object GlobalStateTest extends TestParameters:
   import Interpreters.*
 
   val overallInterpreter: Eff[R0, _] ~> IO =
-    FunctionK.lift([A] =>
-      (eff: Eff[R0, A]) => {
-        IO.ref(0) >>= { ref =>
-          Util.fixNat[Eff[R0, _], IO](self =>
-            handleSpawnWithDestinationF(self)
-              .andThen(logWithCurrentThreadName)
-              .andThen(handleStateWithRef(ref))
-              .andThen(handleSleepWithTemporal)
-              .andThen(runIO)
-          ).apply(eff)
-        }
-    })
+    Util.flattenNat {
+      IO.ref(0).map { ref =>
+        Util.fixNat[Eff[R0, _], IO](self =>
+          handleSpawnWithDestinationF(self)
+            .andThen(logWithCurrentThreadName)
+            .andThen(handleStateWithRef(ref))
+            .andThen(handleSleepWithTemporal)
+            .andThen(runIO)
+        )
+      }
+    }
 
   def main(args: Array[String]): Unit =
     import cats.effect.unsafe.implicits.global
