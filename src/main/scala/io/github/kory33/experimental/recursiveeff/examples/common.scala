@@ -29,6 +29,21 @@ package common:
     def sleepFinite[R](duration: FiniteDuration)(using Sleep |= R): Eff[R, Unit] =
       Eff.send(Sleep.SleepFinite(duration))
 
+    enum TracingEffect[R, A]:
+      case Span(name: String, block: Eff[R, A])
+    def enterSpan[R, A](spanName: String)(block: Eff[R, A])(using
+    TracingEffect[R, _] |= R): Eff[R, A] =
+      Eff.send(TracingEffect.Span(spanName, block))
+
+    enum SpanTimerEffect[R, A]:
+      case SpanTimer[R, A](block: Eff[R, A]) extends SpanTimerEffect[R, (A, FiniteDuration)]
+    def spanTimer[R0, R, A](block: Eff[R0, A])(
+      using SpanTimerEffect[R0, _] |= R
+    ): Eff[R, (A, FiniteDuration)] =
+      Eff.send[SpanTimerEffect[R0, _], R, (A, FiniteDuration)](
+        SpanTimerEffect.SpanTimer[R0, A](block)
+      )
+
     trait StateEffectCreation:
       def get[S, R](using State[S, _] |= R): Eff[R, S] =
         send[State[S, _], R, S](State.get)
@@ -41,6 +56,48 @@ package common:
 
   object Interpreters:
     import Effects.*
+
+    def handleTracingSpanWithTimeLogging[F[_], R, R0, U](handleToF: Eff[R0, _] ~> F)(
+      using Member.Aux[TracingEffect[R0, _], R, U],
+      SpanTimerEffect[R0, _] |= U,
+      F |= R0,
+      Logging |= U
+    ): Eff[R, _] ~> Eff[U, _] =
+      FunctionK.lift([A] =>
+        (eff: Eff[R, A]) =>
+          eff.translate(new Translate[TracingEffect[R0, _], U] {
+            def apply[X](kv: TracingEffect[R0, X]): Eff[U, X] =
+              kv match
+                case TracingEffect.Span(name, block) =>
+                  for
+                    _ <- printlnInfo(s"[$name] span start")
+                    resultAndDuration <- spanTimer(send(handleToF(block)))
+                    (result, duration) = resultAndDuration
+                    _ <- printlnInfo(s"[$name] span end: $duration")
+                  yield result
+          }))
+
+    def handleSpanTimerWithTemporal[F[_], R0, R, U](
+      runToF: Eff[R0, _] ~> F
+    )(
+      using Member.Aux[SpanTimerEffect[R0, _], R, U],
+      F |= U,
+      GenTemporal[F, ?]
+    ): Eff[R, _] ~> Eff[U, _] =
+      FunctionK.lift([A] =>
+        (eff: Eff[R, A]) =>
+          eff.translate(new Translate[SpanTimerEffect[R0, _], U] {
+            def apply[X](kv: SpanTimerEffect[R0, X]): Eff[U, X] =
+              kv match
+                case SpanTimerEffect.SpanTimer(block) =>
+                  send {
+                    for
+                      start <- GenTemporal[F].monotonic
+                      result <- runToF(block)
+                      end <- GenTemporal[F].monotonic
+                    yield (result, end - start)
+                  }
+          }))
 
     def logWithCurrentThreadName[R, U](
       using Member.Aux[Logging, R, U],

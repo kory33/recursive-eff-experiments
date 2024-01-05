@@ -44,8 +44,10 @@ trait TestParameters:
   /// ----
   // Definitions for the effect stack we will use
   //
-  type RKernel = [R] =>> Fx.fx5[
+  type RKernel = [R] =>> Fx.fx7[
     SpawnEffect[R, Throwable, _],
+    TracingEffect[R, _],
+    SpanTimerEffect[R, _],
     Logging,
     Sleep,
     State[Int, _],
@@ -63,6 +65,7 @@ trait TestParameters:
 
   val testProgram: Eff[R0, Unit] =
     import scala.concurrent.duration.*
+    import io.github.kory33.experimental.recursiveeff.examples.common.Effects.*
     for
       _ <- printlnInfo[R0]("Hello world!")
       _ <- get >>= (s => printlnInfo(s"Initial state: ${s}"))
@@ -76,19 +79,17 @@ trait TestParameters:
       handle <- start {
         for
           _ <- printlnInfo[R0]("Hello world from a spawned fiber!")
-
-          _ <- printlnInfo("modifying refcell in spawned fiber...")
-          _ <- (0 until 4).toList.traverse { _ =>
-            incrementAndLog >> incrementAndLog >> sleepFinite(500.millis)
+          _ <- enterSpan("spawned-state-update") {
+            (0 until 4).toList.traverse { _ =>
+              incrementAndLog >> incrementAndLog >> sleepFinite(500.millis)
+            }
           }
-          _ <- printlnInfo[R0]("spawned fiber done.")
         yield ()
       }
 
-      _ <- printlnInfo("modifying refcell in main fiber...")
-      _ <- (0 until 4).toList.traverse { _ => incrementAndLog >> sleepFinite(500.millis) }
-      _ <- printlnInfo[R0]("main fiber done.")
-
+      _ <- enterSpan("main-state-update") {
+        (0 until 4).toList.traverse { _ => incrementAndLog >> sleepFinite(500.millis) }
+      }
       _ <- handle.join
       _ <- get >>= (r => printlnInfo(s"joined. final state: ${r}"))
     yield ()
@@ -101,6 +102,8 @@ object ScopeLocalStateTest extends TestParameters:
       Util.flattenNat {
         IO.ref(0).map { ref =>
           handleSpawnWithDestinationF(self)
+            .andThen(handleTracingSpanWithTimeLogging(self))
+            .andThen(handleSpanTimerWithTemporal(self))
             .andThen(logWithCurrentThreadName)
             .andThen(handleStateWithRef(ref))
             .andThen(handleSleepWithTemporal)
@@ -146,6 +149,8 @@ object GlobalStateTest extends TestParameters:
       IO.ref(0).map { ref =>
         Util.fixNat(self =>
           handleSpawnWithDestinationF(self)
+            .andThen(handleTracingSpanWithTimeLogging(self))
+            .andThen(handleSpanTimerWithTemporal(self))
             .andThen(logWithCurrentThreadName)
             .andThen(handleStateWithRef(ref))
             .andThen(handleSleepWithTemporal)
